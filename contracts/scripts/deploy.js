@@ -5,7 +5,7 @@ require("dotenv").config();
 async function main() {
   const [deployer] = await ethers.getSigners();
   const admin      = process.env.ADMIN || deployer.address;
-  const router     = process.env.CCIP_ROUTER;
+  const router     = process. env.CCIP_ROUTER;
   const name       = process.env.BRIDGED_NAME   || "Wrapped TOKEN";
   const symbol     = process.env.BRIDGED_SYMBOL || "wTKN";
   const decs       = Number(process.env.BRIDGED_DECIMALS || 18);
