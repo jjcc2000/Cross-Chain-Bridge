@@ -1,18 +1,28 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Address, formatUnits, isAddress, parseUnits } from "viem";
+import {
+  Address,
+  formatUnits,
+  isAddress,
+  parseUnits,
+} from "viem";
 import {
   useAccount,
+  useChainId,
   useWaitForTransactionReceipt,
   useWriteContract,
   useReadContract,
 } from "wagmi";
 import { erc20Abi } from "viem";
+import toast from "react-hot-toast";
+
 import { tokenVaultAbi } from "@/lib/abis";
 import { estimateCcipFee } from "@/lib/ccipFee";
 import { getDestName } from "@/lib/dest";
-import toast from "react-hot-toast";
+import { txUrl } from "../lib/explorer";
+
+import { erc20DecimalsFn, erc20SymbolFn } from "@/lib/tokenMeta";
 
 const VAULT = process.env.NEXT_PUBLIC_SEPOLIA_VAULT as Address | undefined;
 const DST_SELECTOR = BigInt(process.env.NEXT_PUBLIC_DST_SELECTOR || "0");
@@ -37,6 +47,8 @@ const sub: React.CSSProperties = { opacity: 0.8, fontSize: 12 };
 
 export default function BridgeForm() {
   const { address } = useAccount();
+  const chainId = useChainId();
+
   const [token, setToken] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
   const [to, setTo] = useState<string>("");
@@ -50,9 +62,30 @@ export default function BridgeForm() {
     isSuccess,
   } = useWaitForTransactionReceipt({ hash: txHash });
 
-  // --- Reads: balance & allowance (assume 18 decimals for now) ---
-  const decimals = 18;
+  // ---- Token metadata (decimals & symbol) ----
+  const decimalsRead = useReadContract({
+    ...erc20DecimalsFn,
+    address: isAddress(token) ? (token as Address) : undefined,
+    query: { enabled: isAddress(token) },
+  });
 
+  const symbolRead = useReadContract({
+    ...erc20SymbolFn,
+    address: isAddress(token) ? (token as Address) : undefined,
+    query: { enabled: isAddress(token) },
+  });
+
+  const decimals = useMemo(() => {
+    const v = decimalsRead.data as number | undefined;
+    return typeof v === "number" ? v : 18; // fallback
+  }, [decimalsRead.data]);
+
+  const symbol = useMemo(() => {
+    const v = symbolRead.data as string | undefined;
+    return v ?? "TOKEN";
+  }, [symbolRead.data]);
+
+  // ---- Reads: balance & allowance ----
   const balanceRead = useReadContract({
     address: isAddress(token) ? (token as Address) : undefined,
     abi: erc20Abi,
@@ -70,29 +103,29 @@ export default function BridgeForm() {
   });
 
   const balance = useMemo(() => {
-    const v = (balanceRead.data as bigint | undefined) ?? BigInt(0);
+    const v = (balanceRead.data as bigint | undefined) ?? 0n;
     return formatUnits(v, decimals);
-  }, [balanceRead.data]);
+  }, [balanceRead.data, decimals]);
 
   const allowance = useMemo(() => {
-    const v = (allowanceRead.data as bigint | undefined) ?? BigInt(0);
+    const v = (allowanceRead.data as bigint | undefined) ?? 0n;
     return formatUnits(v, decimals);
-  }, [allowanceRead.data]);
+  }, [allowanceRead.data, decimals]);
 
   const amountUnits = useMemo(() => {
     try {
       return parseUnits(amount || "0", decimals);
     } catch {
-      return BigInt(0);
+      return 0n;
     }
-  }, [amount]);
+  }, [amount, decimals]);
 
   const allowanceOk = useMemo(() => {
-    const a = (allowanceRead.data as bigint | undefined) ?? BigInt(0);
+    const a = (allowanceRead.data as bigint | undefined) ?? 0n;
     return a >= amountUnits;
   }, [allowanceRead.data, amountUnits]);
 
-  // --- Auto-estimate CCIP fee ---
+  // ---- Auto-estimate CCIP fee ----
   useEffect(() => {
     (async () => {
       try {
@@ -117,9 +150,9 @@ export default function BridgeForm() {
         setAutoFee(false);
       }
     })();
-  }, [token, to, amount]);
+  }, [token, to, amount, decimals]);
 
-  // --- Toasts based on hook state (no inline callbacks) ---
+  // ---- Toasts (no inline any types) ----
   useEffect(() => {
     if (error) toast.error(`Tx error: ${error.message}`);
   }, [error]);
@@ -137,7 +170,7 @@ export default function BridgeForm() {
     }
   }, [receipt, isSuccess]);
 
-  // --- Actions ---
+  // ---- Actions ----
   const onApprove = () => {
     if (!address || !amount || !token || !VAULT) return;
     const value = parseUnits(amount, decimals);
@@ -186,9 +219,7 @@ export default function BridgeForm() {
         padding: 20,
       }}
     >
-      <h2 style={{ marginBottom: 8 }}>
-        Bridge (Sepolia → {getDestName()})
-      </h2>
+      <h2 style={{ marginBottom: 8 }}>Bridge (Sepolia → {getDestName()})</h2>
       <p style={sub}>Vault: {VAULT ?? "-"}</p>
 
       <div style={{ display: "grid", gap: 12 }}>
@@ -203,14 +234,19 @@ export default function BridgeForm() {
         </label>
 
         <div
-          style={{ display: "flex", gap: 16, fontSize: 13, opacity: 0.85 }}
+          style={{
+            display: "flex",
+            gap: 16,
+            fontSize: 13,
+            opacity: 0.85,
+          }}
         >
           <span>Balance: {balance}</span>
           <span>Allowance → Vault: {allowance}</span>
         </div>
 
         <label>
-          Amount
+          Amount {symbol ? `(${symbol})` : ""}
           <input
             placeholder="100"
             value={amount}
@@ -261,6 +297,17 @@ export default function BridgeForm() {
             Lock & Bridge
           </button>
         </div>
+
+        {txHash && (
+          <a
+            href={txUrl(chainId ?? 0, txHash as `0x${string}`)}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: 13, opacity: 0.85 }}
+          >
+            View on explorer ↗
+          </a>
+        )}
       </div>
     </div>
   );

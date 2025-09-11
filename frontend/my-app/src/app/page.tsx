@@ -1,7 +1,9 @@
+"use client";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import BridgeForm from "../components/BridgeForm";
-import StatusPanel from "../components/StatusPanel";
-import NetworkGuard from "../components/NetworkGuard";
+import NetworkGuard from "@/components/NetworkGuard";
+import BridgeForm from "@/components/BridgeForm";
+import DestBalance from "../components/DestBalance";
+import StatusPanel from "@/components/StatusPanel";
 
 export default function Home() {
   return (
@@ -21,6 +23,7 @@ export default function Home() {
         <BridgeForm />
       </NetworkGuard>
 
+      <DestBalance />
       <StatusPanel />
     </div>
   );

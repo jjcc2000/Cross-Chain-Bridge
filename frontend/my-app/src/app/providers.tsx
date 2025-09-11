@@ -8,7 +8,7 @@ import { sepolia, polygonAmoy, arbitrumSepolia } from "wagmi/chains";
 
 const config = getDefaultConfig({
   appName: "Cross-Chain Bridge",
-  projectId: "bridge-demo", // WalletConnect Cloud ID if you want real multi-wallet
+  projectId: "bridge-demo", 
   chains: [sepolia, polygonAmoy, arbitrumSepolia],
   ssr: true
 });
