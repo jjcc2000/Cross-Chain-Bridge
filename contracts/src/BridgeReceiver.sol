@@ -2,22 +2,25 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
 import "./interfaces/IBridgedERC20.sol";
 import "./libs/CCIPUtil.sol";
 
-interface ICCIPReceiver {
-    function ccipReceive(bytes calldata message) external;
-}
-
 /// @notice Destination-chain endpoint: validates router + payload, then mints bridged tokens.
-contract BridgeReceiver is Ownable, ICCIPReceiver, Pausable {
+contract BridgeReceiver is Ownable, Pausable {
     address public trustedRouter; // CCIP router on this chain
     mapping(uint64 => mapping(address => bool)) public isAllowedSource;
     mapping(address => bool) public allowedBridgedTokens;
     mapping(bytes32 => bool) public processed;
+    mapping(address => address) public canonicalToBridged;
+
+    event CanonicalMapped(
+        address indexed canonical,
+        address indexed bridged,
+        bool allowed
+    );
+
     event RouterSet(address indexed router);
     event BridgedTokenSet(address indexed token, bool allowed);
     event SourceAllowed(
@@ -67,22 +70,38 @@ contract BridgeReceiver is Ownable, ICCIPReceiver, Pausable {
     }
 
     /// @dev message = abi.encode(receiverAddr, abi.encode(CCIPUtil.Payload{token,to,amount}))
-    function ccipReceive(bytes calldata message) external onlyRouter {
-        (
-            address supposedReceiver,
-            uint64 srcChain,
-            address srcSender,
-            bytes32 msgId,
-            bytes memory payloadBytes
-        ) = abi.decode(message, (address, uint64, address, bytes32, bytes));
-
-        require(!processed[msgId], "Replay");
-        processed[msgId] = true;
-        require(isAllowedSource[srcChain][srcSender], "SRC_NOT_ALLOWED");
+    function ccipReceive(
+        bytes calldata message
+    ) external onlyRouter whenNotPaused {
+        // Router forwards exactly what the vault sent:
+        // abi.encode(dstReceiver, payloadBytes)
+        (address supposedReceiver, bytes memory payloadBytes) = abi.decode(
+            message,
+            (address, bytes)
+        );
 
         require(supposedReceiver == address(this), "WRONG_RECEIVER");
+
         CCIPUtil.Payload memory p = CCIPUtil.decode(payloadBytes);
-        require(allowedBridgedTokens[p.token], "TOKEN_NOT_ALLOWED");
-        IBridgedERC20(p.token).mint(p.to, p.amount);
+
+        address bridged = canonicalToBridged[p.token];
+        require(bridged != address(0), "MAP_MISSING");
+
+        IBridgedERC20(bridged).mint(p.to, p.amount);
+    }
+
+    function setCanonicalMapping(
+        address canonical,
+        address bridged,
+        bool allowed
+    ) external onlyOwner {
+        // optional: also maintain allowedBridgedTokens[bridged] = allowed;
+        if (allowed) {
+            canonicalToBridged[canonical] = bridged;
+        } else {
+            canonicalToBridged[canonical] = address(0);
+        }
+        allowedBridgedTokens[bridged] = allowed;
+        emit CanonicalMapped(canonical, bridged, allowed);
     }
 }

@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Address,
+  formatEther,
   formatUnits,
   isAddress,
   parseUnits,
+  parseEther,
 } from "viem";
 import {
   useAccount,
@@ -21,7 +23,6 @@ import { tokenVaultAbi } from "@/lib/abis";
 import { estimateCcipFee } from "@/lib/ccipFee";
 import { getDestName } from "@/lib/dest";
 import { txUrl } from "../lib/explorer";
-
 import { erc20DecimalsFn, erc20SymbolFn } from "@/lib/tokenMeta";
 
 const VAULT = process.env.NEXT_PUBLIC_SEPOLIA_VAULT as Address | undefined;
@@ -55,7 +56,12 @@ export default function BridgeForm() {
   const [fee, setFee] = useState<string>("");
   const [autoFee, setAutoFee] = useState<boolean>(false);
 
-  const { writeContract, data: txHash, isPending, error } = useWriteContract();
+  const {
+    writeContractAsync,
+    data: txHash,
+    isPending,
+    error,
+  } = useWriteContract();
   const {
     data: receipt,
     isLoading: isWaiting,
@@ -140,8 +146,9 @@ export default function BridgeForm() {
           to as Address,
           amt
         );
+
         if (est > 0n) {
-          setFee(est.toString());
+          setFee(formatEther(est));
           setAutoFee(true);
         } else {
           setAutoFee(false);
@@ -171,45 +178,81 @@ export default function BridgeForm() {
   }, [receipt, isSuccess]);
 
   // ---- Actions ----
-  const onApprove = () => {
+  const onApprove = async () => {
     if (!address || !amount || !token || !VAULT) return;
     const value = parseUnits(amount, decimals);
     toast.loading("Approving…", { id: "approve" });
     try {
-      writeContract({
+      const hash = writeContractAsync({
         address: token as Address,
         abi: erc20Abi,
         functionName: "approve",
         args: [VAULT, value],
+      });
+      toast.success(`Bridge transaction sent tx:${hash}`, {
+        id: "bridge",
       });
     } finally {
       toast.dismiss("approve");
     }
   };
 
-  const onBridge = () => {
+  const onBridge = async () => {
     if (!address || !token || !amount || !to || !VAULT) return;
+
     if (!allowanceOk) {
       toast.error("Allowance too low. Approve first.");
       return;
     }
-    const value = parseUnits(amount, decimals);
-    toast.loading("Locking & bridging…", { id: "bridge" });
+
+    // amount in token units -> bigint
+    let value: bigint;
     try {
-      writeContract({
+      value = parseUnits(amount, decimals); // e.g. "50" @ 18 -> 50000000000000000000n
+    } catch {
+      toast.error("Invalid amount");
+      return;
+    }
+
+    // fee in ETH string -> wei bigint (supports decimals like "0.002")
+    let feeWei: bigint = 0n;
+
+    try {
+      const feeStr = (fee ?? "").trim();
+      if (feeStr !== "") {
+        feeWei = parseEther(feeStr);
+      }
+    } catch {
+      toast.error("Invalid CCIP fee (ETH, e.g. 0.002)");
+      return;
+    }
+
+    // make sure selector is bigint
+    const selector =
+      typeof DST_SELECTOR === "bigint"
+        ? DST_SELECTOR
+        : BigInt(String(DST_SELECTOR));
+
+    const id = "bridge";
+    toast.loading("Locking & bridging…", { id });
+
+    try {
+      const tx = await writeContractAsync({
         address: VAULT,
         abi: tokenVaultAbi,
         functionName: "lockAndBridge",
-        args: [token as Address, value, to as Address, DST_SELECTOR],
-        value: BigInt(fee || "0"),
+        args: [token as Address, value, to as Address, selector],
+        value: feeWei,
       });
-    } finally {
-      toast.dismiss("bridge");
+      toast.success(`Bridge tx sent: ${tx}`, { id });
+    } catch (err: any) {
+      alert("Error on the WriteContractAsync");
+      console.error(err);
+      toast.error(err?.shortMessage ?? err?.message ?? "Bridge failed", { id });
     }
   };
 
-  const disabled =
-    !VAULT || !token || !amount || !to || isPending || isWaiting;
+  const disabled = !VAULT || !token || !amount || !to || isPending || isWaiting;
 
   return (
     <div
@@ -266,7 +309,7 @@ export default function BridgeForm() {
         </label>
 
         <label>
-          CCIP Fee (wei) {autoFee ? "— auto" : "— manual"}
+          CCIP Fee (ETH) {autoFee ? "— auto" : "— manual"}
           <input
             placeholder={autoFee ? "auto" : "0"}
             value={fee}
@@ -298,9 +341,9 @@ export default function BridgeForm() {
           </button>
         </div>
 
-        {txHash && (
+        {chainId && txHash && (
           <a
-            href={txUrl(chainId ?? 0, txHash as `0x${string}`)}
+            href={txUrl(chainId, txHash as `0x${string}`)}
             target="_blank"
             rel="noreferrer"
             style={{ fontSize: 13, opacity: 0.85 }}

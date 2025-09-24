@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+
 // import "@openzeppelin/contracts/access/AccessControlDefaultAdminRules.sol";
 
 contract BridgedERC20 is ERC20, AccessControl {
@@ -11,7 +12,7 @@ contract BridgedERC20 is ERC20, AccessControl {
 
     event MinterUpdated(address indexed minter, bool allowed);
 
-    constructor(    
+    constructor(
         string memory name_,
         string memory symbol_,
         uint8 decimals_,
@@ -38,7 +39,7 @@ contract BridgedERC20 is ERC20, AccessControl {
         _mint(to, amount);
     }
 
-    function burn(uint256 amount) external onlyRole(MINTER_ROLE) {
-        _burn(msg.sender, amount);
+    function burn(address from, uint256 amount) external onlyRole(MINTER_ROLE) {
+        _burn(from, amount);
     }
 }
