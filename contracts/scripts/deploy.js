@@ -1,4 +1,3 @@
-// deploy/deploy_all.js
 const { ethers, network } = require("hardhat");
 const { isAddress, getAddress } = require("ethers");
 require("dotenv").config();
@@ -18,12 +17,19 @@ async function waitFor(contract) {
 
 async function deployDestination() {
   const [deployer] = await ethers.getSigners();
-  const admin  = isAddress(process.env.ADMIN) ? getAddress(process.env.ADMIN) : deployer.address;
-  const router = mustAddr(process.env.CCIP_ROUTER, "CCIP_ROUTER");
+  const admin = isAddress(process.env.ADMIN)
+    ? getAddress(process.env.ADMIN)
+    : deployer.address;
 
-  const name   = process.env.BRIDGED_NAME   || "Wrapped TOKEN";
+  const router = mustAddr(process.env.CCIP_ROUTER, "CCIP_ROUTER");
+  const canonicalOnSource = mustAddr(
+    process.env.CANONICAL_TOKEN,
+    "CANONICAL_TOKEN"
+  ); // <— ADD
+
+  const name = process.env.BRIDGED_NAME || "Wrapped TOKEN";
   const symbol = process.env.BRIDGED_SYMBOL || "wTKN";
-  const decs   = Number(process.env.BRIDGED_DECIMALS || 18);
+  const decs = Number(process.env.BRIDGED_DECIMALS || 18);
 
   console.log("Deployer:", deployer.address);
   console.log("Network :", network.name, "(destination)");
@@ -34,11 +40,15 @@ async function deployDestination() {
   const Receiver = await ethers.getContractFactory("BridgeReceiver");
   const receiver = await Receiver.deploy(admin);
   const receiverAddr = await waitFor(receiver);
+
   console.log("BridgeReceiver:", receiverAddr);
 
   const Token = await ethers.getContractFactory("BridgedERC20");
   const token = await Token.deploy(name, symbol, decs, admin);
   const tokenAddr = await waitFor(token);
+  await (
+    await receiver.setCanonicalMapping(canonicalOnSource, tokenAddr, true)
+  ).wait();
   console.log("BridgedERC20 :", tokenAddr);
 
   console.log("\n=== Configuring destination ===");
@@ -53,11 +63,13 @@ async function deployDestination() {
 
 async function deploySource() {
   const [deployer] = await ethers.getSigners();
-  const admin        = isAddress(process.env.ADMIN) ? getAddress(process.env.ADMIN) : deployer.address;
-  const router       = mustAddr(process.env.CCIP_ROUTER, "CCIP_ROUTER");          // Sepolia router
-  const dstSelector  = process.env.DST_CHAIN_SELECTOR;                             // e.g. Amoy selector
-  const canonicalTok = mustAddr(process.env.CANONICAL_TOKEN, "CANONICAL_TOKEN");   // Sepolia ERC20
-  const receiverAddr = mustAddr(process.env.RECEIVER_ADDR, "RECEIVER_ADDR");       // Receiver deployed on dest
+  const admin = isAddress(process.env.ADMIN)
+    ? getAddress(process.env.ADMIN)
+    : deployer.address;
+  const router = mustAddr(process.env.CCIP_ROUTER, "CCIP_ROUTER"); // Sepolia router
+  const dstSelector = process.env.DST_CHAIN_SELECTOR; // e.g. Amoy selector
+  const canonicalTok = mustAddr(process.env.CANONICAL_TOKEN, "CANONICAL_TOKEN"); // Sepolia ERC20
+  const receiverAddr = mustAddr(process.env.RECEIVER_ADDR, "RECEIVER_ADDR"); // Receiver deployed on dest
 
   if (!dstSelector) throw new Error("Missing DST_CHAIN_SELECTOR in .env");
 
@@ -92,4 +104,7 @@ async function main() {
   console.log("\n=== Deploy Complete ✅ ===");
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

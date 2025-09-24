@@ -123,13 +123,7 @@ contract TokenVault is Pausable, ReentrancyGuard, Ownable2Step, ICCIPReceiver {
         emit Locked(token, msg.sender, amount, to, dstChain, msgId);
     }
 
-    // ====== Receive & Unlock (receive path) ======
-    // message = abi.encode(
-    //   uint64 srcChainSelector,
-    //   address srcSender /*BridgeReceiver on src*/,
-    //   bytes32 msgId,
-    //   bytes   payloadBytes // CCIPUtil.encode(CCIPUtil.Payload({token,to,amount}))
-    // )
+
     function ccipReceive(
         bytes calldata message
     ) external onlyRouter whenNotPaused {
