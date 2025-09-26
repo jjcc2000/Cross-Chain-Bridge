@@ -22,7 +22,7 @@ async function main() {
   const tx = await ccipSender.send(
     ccipReceiverAddress,
     someText,
-    desinationChainSelector
+    destinationChainSelector
   );
   console.log(destinationChainSelector);
   console.log(`Transaction hash: ${tx.hash}`);
