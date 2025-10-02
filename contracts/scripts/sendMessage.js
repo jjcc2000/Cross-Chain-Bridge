@@ -1,34 +1,46 @@
-import { ethers, network } from "hardhat";
+const { ethers, network } = require("hardhat");
 
 async function main() {
-  if (network.name !== `avalancheFuji`) {
-    console.error(`❌ Must be called from Avalanche Fuji`);
-    return 1;
+  if (network.name !== "amoy") {
+    console.error("❌ Must be called from amoy");
+    process.exit(1);
   }
 
-  const ccipSenderAddress = `PUT CCIP_SENDER_UNSAFE ADDRESS HERE`;
-  const ccipReceiverAddress = `PUT CCIP_RECEIVER_UNSAFE ADDRESS HERE`;
-  const someText = `CCIP Masterclass`;
-  const destinationChainSelector = 16015286601757825753;
+  // Deployed CCIPSender_Unsafe on Amoy
+  const ccipSenderAddress = "0x3ec67a50fb1E2BCC84c7b97f1CE19F3527dF214b";
 
-  const ccipSenderFactory = await ethers.getContractFactory(
-    "CCIPSender_Unsafe"
-  );
-  const ccipSender = await ccipSenderFactory.connect(
+  // 🚨 IMPORTANT: This must live on the DESTINATION chain (see selector below)
+  // If you're sending to Sepolia, put your Sepolia receiver address here.
+  const ccipReceiverAddress = "0xFDb8637D4D180F41675D0683d32Bc95c954de122";
+
+  // Use BigInt for the selector (Sepolia in this example)
+  const destinationChainSelector = 16015286601757825753n; // Sepolia
+
+  const [signer] = await ethers.getSigners();
+
+  // Attach to the already deployed contract
+  const ccipSender = await ethers.getContractAt(
+    "CCIPSender_Unsafe",
     ccipSenderAddress,
-    ethers.provider
+    signer
   );
+
+  const someText = "CCIP Masterclass";
 
   const tx = await ccipSender.send(
     ccipReceiverAddress,
     someText,
-    desinationChainSelector
+    destinationChainSelector
   );
-  console.log(destinationChainSelector);
-  console.log(`Transaction hash: ${tx.hash}`);
+
+  console.log("Destination selector:", destinationChainSelector.toString());
+  console.log("📨 Transaction hash:", tx.hash);
+
+  const receipt = await tx.wait();
+  console.log("✅ Mined in block:", receipt.blockNumber);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
 });
