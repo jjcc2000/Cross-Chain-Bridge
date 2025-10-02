@@ -25,11 +25,6 @@ async function main() {
   console.log("   Address:", addr);
   console.log("   Tx hash:", txHash);
 
-  // Optional: verify (works once the tx is indexed)
-  // await run("verify:verify", {
-  //   address: addr,
-  //   constructorArguments: [sepoliaRouterAddress],
-  // });
 }
 
 main().catch((err) => {

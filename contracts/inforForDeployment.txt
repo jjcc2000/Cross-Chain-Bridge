@@ -1,4 +1,1 @@
-✅ CCIPReceiver_Unsafe deployed
-   Address: 0xFDb8637D4D180F41675D0683d32Bc95c954de122
-   Tx hash: 0xe2b1198e55111b3ea20e3f34b2c6db83459d73e38fbb81825021a991bede4c13
-
+s

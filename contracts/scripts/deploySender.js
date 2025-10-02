@@ -1,40 +1,30 @@
 //  0xF694E193200268f9a4868e4Aa017A0118C9a8177
 //  scripts/deploy-ccip-sender.js
+// scripts/deploySender.ts
 
 const { ethers, network, run } = require("hardhat");
 
 async function main() {
-  // Change this to match your hardhat.config network name exactly
-  const REQUIRED_NETWORK = "avalancheFuji"; // e.g., "fuji" if that's what you named it
-
-  if (network.name !== REQUIRED_NETWORK) {
-    console.error(`❌ Deploy on ${REQUIRED_NETWORK}. Current: ${network.name}`);
-    process.exit(1);
+  if (network.name !== `amoy`) {
+    console.error(`❌ Sender must be deployed to amoy`);
+    return 1;
   }
 
-  // Fuji addresses
-  const fujiLinkAddress = "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846";
-  const fujiRouterAddress = "0xF694E193200268f9a4868e4Aa017A0118C9a8177";
+  const AMOY_LINK = "0x0Fd9e8d3aF1aaee056EB9e802c3A762a667b1904";
+  const AMOY_ROUTER = "0x9C32fCB86BF0f4a1A8921a9Fe46de3198bb884B2";
 
-  // Optional: ensure fresh build
   await run("compile");
 
-  const CCIPSenderFactory = await ethers.getContractFactory(
-    "CCIPSender_Unsafe"
-  );
-  const ccipSender = await CCIPSenderFactory.deploy(
-    fujiLinkAddress,
-    fujiRouterAddress
-  );
+  const Factory = await ethers.getContractFactory("CCIPSender_Unsafe");
+  const ccipSender = await Factory.deploy(AMOY_LINK, AMOY_ROUTER);
 
-  // ethers v6: wait for deployment + read address
   await ccipSender.waitForDeployment();
-  const address = await ccipSender.getAddress();
+  const addr = await ccipSender.getAddress();
 
-  console.log(`✅ CCIPSender_Unsafe deployed to: ${address}`);
+  console.log(`CCIPSender_Unsafe deployed to ${addr}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
 });
